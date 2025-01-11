@@ -8,6 +8,8 @@ import numpy as np
 from utils import Vec, Timer
 
 
+PROJECT_DIR = Path(__file__).parent
+
 
 # Width, height
 WINDOW_SIZE = Vec(1280, 720)
@@ -125,7 +127,7 @@ def load_drawings() -> list[ReferenceDrawing]:
     Loads all images and scales to size of the drawing board
     """
     images = []
-    for file in Path("resources/drawings").iterdir():
+    for file in (PROJECT_DIR / "resources/drawings").iterdir():
         image = pygame.image.load(file)
         image = pygame.transform.scale(image, tuple(DRAWING_BOARD_SIZE))
         images.append(ReferenceDrawing(image, file.stem))
