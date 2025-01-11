@@ -17,6 +17,18 @@ if IS_RPI:
     from utils import serial_utils
     serial_thread = threading.Thread(target=serial_utils.read_from_port, args=(serial_utils.serial_port, ))
     serial_thread.start()
+
+    import socket
+    HOST = '127.0.0.1'  # Localhost (same machine)
+    PORT = 65432        # Port to bind the server to
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind( (HOST, PORT) )
+    # Enable the server to accept connections (max 1 connection in the backlog)
+    server_socket.listen(1)
+    print(f"Server listening on {HOST}:{PORT}...")
+    # Accept a client connection
+    client_socket, client_address = server_socket.accept()
+    print(f"Connection from {client_address} has been established.")
 else:
     print(f"NOT running on Raspberry Pi! (I think)")
 PROJECT_DIR = Path(__file__).parent
@@ -139,7 +151,7 @@ class GameState():
         self.reference_drawings = load_drawings()
         self.color_squares = get_color_squares()
 
-        self.cursor_is_active = False
+        self.cursor_is_active = True
         self.remaining_drawing_indices = list(range(len(self.reference_drawings)))
         self.selected_color_square_index = 0
         self.n_color_squares = len(self.color_squares)
@@ -238,10 +250,16 @@ def main():
     game = GameState()
     game.select_next_drawing()
 
+    n_emg_average_frames = 6
+    emg_arr = np.zeros(n_emg_average_frames)
+
     # Main game loop
     should_run = True
     frame_timer = Timer(1 / FPS)
+    frame_idx = -1
+    emg_active_last_frame = False
     while should_run:
+        frame_idx += 1
         frame_timer.wait()
         t_frame = time.time()
 
@@ -281,8 +299,32 @@ def main():
         #########################
 
         if IS_RPI:
+            # EMG!
             emg = serial_utils.get_emg_activation()
+            emg_arr[frame_idx % n_emg_average_frames] = emg
+            emg_activation = emg_arr.mean()
+            emg_active = emg_activation > 200 # SET EMG THRESHOLD HERE
             print(emg)
+            if emg_active and not emg_active_last_frame:
+                game.select_next_color()
+            emg_active_last_frame = emg_active
+
+            # Pose!
+            data = client_socket.recv(1024)
+            parsed = data.decode('utf-8')
+            try:
+                pose_x, pose_y = parsed.split()[-2:]
+                pose_pos = Vec(float(pose_x), float(pose_y))
+                pose_pos.Y *= -1 # Convert to pygame's Y-origin-from-bottom convention
+                pose_pos += 200
+                pose_pos /= 400
+                pose_pos = Vec.min(Vec(1.0, 1.0), Vec.max(Vec(0.0, 0.0), pose_pos))
+                cursor_from_pose = pose_pos * DRAWING_BOARD_SIZE
+                game.cursor.pos = cursor_from_pose
+            except Exception as exc:
+                print(f"Exception raised while parsing Pose data from socket: {exc}")
+            # if data:
+            #     print(f"Received data: {parsed}")
 
         ###############
         ### Drawing ###
@@ -315,6 +357,8 @@ def main():
     if IS_RPI:
         serial_utils.thread_should_run = False
         time.sleep(0.5)
+        client_socket.close()
+        server_socket.close()
 
 
 if __name__ == "__main__":

@@ -165,7 +165,6 @@ def high_pass_filter (emg, cutoff, fs, order=4):
 def get_emg_activation():
     global sample_buffer
     emg = sample_buffer.copy()
-    print(sample_buffer.shape)
     
     # Don't change
     emg = emg[-display_size:]
@@ -174,8 +173,9 @@ def get_emg_activation():
 
     # Can change
     fs= 10000
-    cutoff= 20
-    filtered_emg= high_pass_filter( emg, cutoff, fs, order=4)
+    cutoff= 70
+    emg = emg - emg.mean()
+    filtered_emg= high_pass_filter( emg, cutoff, fs, order=3)
 
     #   absolute value
     filtered_emg = np.abs(filtered_emg) 

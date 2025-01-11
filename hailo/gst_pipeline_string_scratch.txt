@@ -1,0 +1,33 @@
+gst-launch-1.0 v4l2src device=/dev/video8 name=source ! video/x-raw, width=640, height=480 !  queue name=source_scale_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! videoscale name=source_videoscale n-threads=2 ! queue name=source_convert_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! videoconvert n-threads=3 name=source_convert qos=false ! video/x-raw, format=RGB, pixel-aspect-ratio=1/1 ! queue name=hailo_display_videoconvert_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! videoconvert name=hailo_display_videoconvert n-threads=2 qos=false ! queue name=hailo_display_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! fpsdisplaysink name=hailo_display video-sink=xvimagesink sync=false text-overlay=false signal-fps-measurements=true
+
+gst-launch-1.0 v4l2src device=/dev/video8 name=source ! 
+  video/x-raw, width=640, height=480 !  
+    queue name=source_scale_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! 
+  videoscale name=source_videoscale n-threads=2 ! 
+    queue name=source_convert_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! 
+  videoconvert n-threads=3 name=source_convert qos=false ! 
+  video/x-raw, format=RGB, pixel-aspect-ratio=1/1 ! 
+    queue name=hailo_display_videoconvert_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! 
+  videoconvert name=hailo_display_videoconvert n-threads=2 qos=false ! 
+    queue name=hailo_display_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! 
+  fpsdisplaysink name=hailo_display video-sink=xvimagesink sync=false text-overlay=false signal-fps-measurements=true
+
+
+#---
+
+#queue name=inference_scale_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! videoscale name=inference_videoscale n-threads=2 qos=false ! queue name=inference_convert_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! video/x-raw, pixel-aspect-ratio=1/1 ! videoconvert name=inference_videoconvert n-threads=2 ! queue name=inference_hailonet_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! hailonet name=inference_hailonet hef-path=/home/neuropracticum/Code/hailo-pose-trial/resources/yolov8m_pose.hef batch-size=2  force-writable=true ! queue name=inference_hailofilter_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! hailofilter name=inference_hailofilter so-path=/home/neuropracticum/Code/hailo-pose-trial/resources/libyolov8pose_postprocess.so   function-name=filter  qos=false  ! queue name=identity_callback_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! identity name=identity_callback  ! queue name=hailo_display_hailooverlay_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! hailooverlay name=hailo_display_hailooverlay 
+
+    queue name=inference_scale_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! 
+  videoscale name=inference_videoscale n-threads=2 qos=false ! 
+    queue name=inference_convert_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! 
+  video/x-raw, pixel-aspect-ratio=1/1 ! 
+  videoconvert name=inference_videoconvert n-threads=2 ! 
+    queue name=inference_hailonet_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! 
+  hailonet name=inference_hailonet hef-path=/home/neuropracticum/Code/hailo-pose-trial/resources/yolov8m_pose.hef batch-size=2  force-writable=true ! 
+    queue name=inference_hailofilter_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! 
+  hailofilter name=inference_hailofilter so-path=/home/neuropracticum/Code/hailo-pose-trial/resources/libyolov8pose_postprocess.so   function-name=filter  qos=false  ! 
+    queue name=identity_callback_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! 
+  identity name=identity_callback  ! 
+    queue name=hailo_display_hailooverlay_q leaky=no max-size-buffers=3 max-size-bytes=0 max-size-time=0  ! 
+  hailooverlay name=hailo_display_hailooverlay 
+

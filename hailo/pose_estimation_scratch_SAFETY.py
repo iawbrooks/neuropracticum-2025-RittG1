@@ -5,7 +5,6 @@ import os
 import numpy as np
 import cv2
 import gpiozero as gpio
-import socket
 import time
 import hailo
 from hailo_rpi_common import (
@@ -88,14 +87,13 @@ def app_callback(pad, info, user_data):
                 tx = (points[10].x() * bbox.width() + bbox.xmin()) * width
                 ty = (points[10].y() * bbox.height() + bbox.ymin()) * height
                 
-                relative_x = x_center -tx
-                relative_y = y_center - ty
+                relative_x= x_center -tx
+                relative_y= y_center - ty
 
-                #print(tx,ty)
-                #print(relative_x,relative_y)
+                print(tx,ty)
+                print(relative_x,relative_y)
 
-                user_data.SOCK.sendall( f'{relative_x} {relative_y} '.encode('utf-8') )
-
+                
                 # TODO: SEND COORDINATES TO GAME THREAD
 
 
@@ -156,14 +154,6 @@ def get_keypoints():
 if __name__ == "__main__":
     # Create an instance of the user app callback class
     user_data = user_app_callback_class()
-
-    HOST = '127.0.0.1'  # Localhost
-    PORT = 65432        # Port to connect to
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((HOST, PORT))
-    user_data.SOCK = client_socket
-    print(f'Connected to server at {HOST}:{PORT}.')
-
     dout = gpio.LED(21)
     dout.off()
     user_data.dout = dout
@@ -173,5 +163,3 @@ if __name__ == "__main__":
         user_data.f = f
         app = GStreamerPoseEstimationApp(app_callback, user_data)
         app.run()
-    client_socket.close()  # TODO: Bring into context manager, currently fails
-    print("Client disconnected.")
