@@ -1,13 +1,21 @@
 from pathlib import Path
 from typing import NamedTuple
+
+import getpass
 import time
+import datetime
 
 import pygame
+from pygame import Surface
 import numpy as np
 
 from utils import Vec, Timer
 
-
+IS_RPI = getpass.getuser() == "neuropracticum"
+if IS_RPI:
+    print(f"Running on Raspberry Pi!")
+else:
+    print(f"NOT running on Raspberry Pi! (I think)")
 PROJECT_DIR = Path(__file__).parent
 
 
@@ -19,19 +27,18 @@ COLOR_SQUARES_Y_OFFSET = 30
 COLOR_SQUARE_SIZE = 30
 COLOR_SQUARE_BORDER = 2
 COLOR_SQUARES_COLORS = [
-    (255, 0,   0), # Red
-    (0,   170, 50), # Green
+    (255, 0,   0),   # Red
+    (0,   170, 50),  # Green
     (10,  10,  200), # Blue
-    (255, 255, 0), # Yellow
+    (255, 255, 0),   # Yellow
     (255, 180, 180), # Pink
-    (255, 150, 0), # Orange
-    (130, 0, 200), # Purple
-    (1,   1,   1), # Black
-    (140, 70, 0), # Brown
+    (255, 150, 0),   # Orange
+    (130, 0,   200), # Purple
+    (1,   1,   1),   # Black
+    (140, 70,  0),   # Brown
 ]
 
 IMAGE_SHOW_PERIOD_SEC = 30
-
 FPS = 60
 
 CURSOR_VELOCITY = 150 / FPS # How many pixels per second should the cursor move?
@@ -66,7 +73,7 @@ class Cursor():
         self.pos = Cursor.bound_valid_pos(self.pos + by)
 
 
-    def stamp(self, surf: pygame.Surface, offset: Vec = Vec(0, 0), with_border: bool = False):
+    def stamp(self, surf: Surface, offset: Vec = Vec(0, 0), with_border: bool = False):
         # First draw border
         if with_border:
             #border_color = tuple(255 - x for x in self.color)
@@ -77,7 +84,7 @@ class Cursor():
         pygame.draw.circle(surf, self.color, center=tuple(self.pos + offset), radius=self.radius)
     
 
-    def draw_line(self, surf: pygame.Surface, pos: Vec):
+    def draw_line(self, surf: Surface, pos: Vec):
         """
         Looks awful lol don't use
         """
@@ -86,6 +93,7 @@ class Cursor():
 
     def bound_valid_pos(pos: Vec) -> Vec:
         return Vec.min(DRAWING_BOARD_SIZE, Vec.max(Vec(0, 0), pos))
+    
 
 
 class ColorSquare():
@@ -99,19 +107,81 @@ class ColorSquare():
         self.shape = shape
 
 
-    def stamp(self, surf: pygame.Surface, bordered: bool):
+    def stamp(self, surf: Surface, bordered: bool):
         border_color = (255, 255, 255) if bordered else (0, 0, 0) 
         pygame.draw.rect(surf, border_color, pygame.Rect(tuple(self.pos - 2), tuple(self.shape + 4)))
         pygame.draw.rect(surf, self.color, pygame.Rect(tuple(self.pos), tuple(self.shape)))
 
 
 class ReferenceDrawing(NamedTuple):
-    surf: pygame.Surface
+    surf: Surface
     name: str
 
 
-def get_checkerboard(shape: Vec[int], rect_shape: Vec[float], color1 = (250, 250, 250), color2 = (230, 230, 230)) -> pygame.Surface:
-    surf = pygame.Surface(tuple(shape))
+class GameState():
+    cursor: Cursor
+    reference_drawings: list[ReferenceDrawing]
+    color_squares: list[ColorSquare]
+    selected_drawing: ReferenceDrawing
+
+    cursor_is_active: bool
+    remaining_drawing_indices: list[int]
+    selected_color_square_index: int
+    n_color_squares: int
+    
+    t_last_reference_drawing: float
+
+    def __init__(self):
+        self.cursor = Cursor(pos = DRAWING_BOARD_SIZE / 2)
+        self.reference_drawings = load_drawings()
+        self.color_squares = get_color_squares()
+
+        self.cursor_is_active = False
+        self.remaining_drawing_indices = list(range(len(self.reference_drawings)))
+        self.selected_color_square_index = 0
+        self.n_color_squares = len(self.color_squares)
+
+        self.t_last_reference_drawing = time.time()
+
+
+    def draw_squares(self, surf: Surface):
+        for i, csq in enumerate(self.color_squares):
+            csq.stamp(surf, i == self.selected_color_square_index)
+    
+
+    def draw_cursor(self, surf: Surface):
+        self.cursor.color = self.color_squares[self.selected_color_square_index].color
+        if self.cursor_is_active:
+            self.cursor.stamp(surf, with_border=False)
+
+
+    def select_next_drawing(self):
+        self.t_last_reference_drawing = time.time()
+        idx: int = np.random.choice(self.remaining_drawing_indices)
+        self.selected_drawing = self.reference_drawings[idx]
+        self.remaining_drawing_indices.remove(idx)
+        print(f"Selected new drawing '{self.selected_drawing.name}'; {len(self.remaining_drawing_indices)} left")
+    
+
+    def save_current_drawing(self, from_surf: Surface):
+        save_dir = PROJECT_DIR / "output_art"
+        now = datetime.datetime.now()
+        filename = f"[{now.year}-{now.month:02}-{now.day}] [{now.hour:02}h{now.minute:02}m{now.second:02}s] {self.selected_drawing.name}.png"
+        filepath = save_dir / filename
+        pygame.image.save(from_surf, filepath)
+
+
+    def select_next_color(self):
+        self.selected_color_square_index = (self.selected_color_square_index + 1) % self.n_color_squares
+
+    
+    def toggle_cursor(self):
+        self.cursor_is_active = not self.cursor_is_active
+
+
+
+def get_checkerboard(shape: Vec[int], rect_shape: Vec[float], color1 = (250, 250, 250), color2 = (230, 230, 230)) -> Surface:
+    surf = Surface(tuple(shape))
     n_rects = (shape / rect_shape).ceil()
     for x_rect in range(n_rects.X):
         for y_rect in range(n_rects.Y):
@@ -131,24 +201,11 @@ def load_drawings() -> list[ReferenceDrawing]:
         image = pygame.image.load(file)
         image = pygame.transform.scale(image, tuple(DRAWING_BOARD_SIZE))
         images.append(ReferenceDrawing(image, file.stem))
+    print(f"Loaded {len(images)} reference drawings")
     return images
 
 
-def main():
-    # Initialize pygame
-    pygame.init()
-    window = pygame.display.set_mode(tuple(WINDOW_SIZE))
-    surf_checkerboard = get_checkerboard(DRAWING_BOARD_SIZE, DRAWING_BOARD_SIZE / 16)
-    surf_canvas = pygame.Surface(tuple(DRAWING_BOARD_SIZE), flags=pygame.SRCALPHA)
-    surf_blacksquare = pygame.Surface(tuple(DRAWING_BOARD_SIZE))
-    surf_blacksquare.set_alpha(255)
-    canvas_blank_color = (0, 0, 0, 0)
-    surf_canvas.fill(canvas_blank_color)
-    # TODO: Could do surf_canvas.set_colorkey((255,255,255)) to just make white transparent 
-
-    # Game objects
-    cursor = Cursor(pos = DRAWING_BOARD_SIZE / 2)
-    cursor_is_active = False
+def get_color_squares():
     n_color_squares = len(COLOR_SQUARES_COLORS)
     color_squares = np.empty(n_color_squares, dtype=object)
     csq_xstart = DRAWING_BOARD_OFFSET.X
@@ -159,21 +216,24 @@ def main():
             pos = Vec(csq_xstart + i*(COLOR_SQUARE_SIZE + COLOR_SQUARE_BORDER * 2), csq_ystart),
             shape = Vec(COLOR_SQUARE_SIZE, COLOR_SQUARE_SIZE)
         )
-    selected_csq_index = 0
+    return color_squares
+
+
+def main():
+    # Initialize pygame
+    pygame.init()
+    window = pygame.display.set_mode(tuple(WINDOW_SIZE))
+    surf_checkerboard = get_checkerboard(DRAWING_BOARD_SIZE, DRAWING_BOARD_SIZE / 16)
+    surf_canvas = Surface(tuple(DRAWING_BOARD_SIZE), flags=pygame.SRCALPHA)
+    surf_blacksquare = Surface(tuple(DRAWING_BOARD_SIZE))
+    surf_blacksquare.set_alpha(255)
+    canvas_blank_color = (0, 0, 0, 0)
+    surf_canvas.fill(canvas_blank_color)
+    # TODO: Could do surf_canvas.set_colorkey((255,255,255)) to just make white transparent 
     
     # Drawings
-    reference_drawings = load_drawings()
-    reference_drawing_indices = list(range(len(reference_drawings)))
-    t_last_reference_drawing: float = time.time()
-    print(f"Loaded {len(reference_drawings)} reference drawings")
-    def select_next_drawing() -> tuple[ReferenceDrawing, float]:
-        t_last_reference_drawing = time.time()
-        idx = np.random.choice(reference_drawing_indices)
-        drawing = reference_drawings[idx]
-        reference_drawing_indices.remove(idx)
-        print(f"Selected new drawing '{drawing.name}'; {len(reference_drawing_indices)} left")
-        return drawing, t_last_reference_drawing
-    currently_selected_drawing, t_last_reference_drawing = select_next_drawing()
+    game = GameState()
+    game.select_next_drawing()
 
     # Main game loop
     should_run = True
@@ -194,9 +254,9 @@ def main():
                     case pygame.K_SPACE: # Clear canvas
                         surf_canvas.fill(canvas_blank_color)
                     case pygame.K_t: # Toggle cursor down
-                        cursor_is_active = not cursor_is_active
+                        game.toggle_cursor()
                     case pygame.K_w: # Next color
-                        selected_csq_index = (selected_csq_index + 1) % n_color_squares
+                        game.select_next_color()
         
         # Process continuous keyboard inputs
         keys = pygame.key.get_pressed()
@@ -211,10 +271,7 @@ def main():
             frame_cursor_delta.X += CURSOR_VELOCITY
 
         # Account for cursor drawing
-        cursor.color = color_squares[selected_csq_index].color
-        if cursor_is_active:
-            cursor.stamp(surf_canvas, with_border=False)
-        cursor.modify_pos(frame_cursor_delta)
+        game.cursor.modify_pos(frame_cursor_delta)
         
         ###############
         ### Drawing ###
@@ -224,19 +281,18 @@ def main():
         window.fill((0, 0, 0)) # TODO: Maybe replace with blitting black rectangle? Unsure if faster
         window.blit(surf_checkerboard, tuple(DRAWING_BOARD_OFFSET)) # TODO: Maybe draw directly onto checkerboard?
         window.blit(surf_canvas, tuple(DRAWING_BOARD_OFFSET))
-        cursor.stamp(window, DRAWING_BOARD_OFFSET, with_border=True)
-
-        # Draw color squares
-        for i, csq in enumerate(color_squares):
-            csq: ColorSquare
-            csq.stamp(window, i == selected_csq_index)
+        game.cursor.stamp(window, DRAWING_BOARD_OFFSET, with_border=True)
+        game.draw_cursor(surf_canvas)
+        game.draw_squares(window)
         
         # Currently shown drawing logic
         pos_shown_drawing = tuple(DRAWING_BOARD_OFFSET + Vec(DRAWING_BOARD_SIZE.X + DRAWING_BOARD_OFFSET.X, 0))
-        surf_blacksquare.set_alpha(255 * (t_frame - t_last_reference_drawing) / IMAGE_SHOW_PERIOD_SEC)
-        if t_frame - t_last_reference_drawing > IMAGE_SHOW_PERIOD_SEC:
-            currently_selected_drawing, t_last_reference_drawing = select_next_drawing()
-        window.blit(currently_selected_drawing.surf, pos_shown_drawing)
+        surf_blacksquare.set_alpha(255 * (t_frame - game.t_last_reference_drawing) / IMAGE_SHOW_PERIOD_SEC)
+        if t_frame - game.t_last_reference_drawing > IMAGE_SHOW_PERIOD_SEC:
+            game.save_current_drawing(surf_canvas)
+            surf_canvas = get_checkerboard(DRAWING_BOARD_SIZE, DRAWING_BOARD_SIZE / 16)
+            game.select_next_drawing()
+        window.blit(game.selected_drawing.surf, pos_shown_drawing)
         window.blit(surf_blacksquare, pos_shown_drawing)
         
         # Update the display
