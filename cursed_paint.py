@@ -1,7 +1,12 @@
+from pathlib import Path
+from typing import NamedTuple
+import time
+
 import pygame
 import numpy as np
 
 from utils import Vec, Timer
+
 
 
 # Width, height
@@ -12,18 +17,18 @@ COLOR_SQUARES_Y_OFFSET = 30
 COLOR_SQUARE_SIZE = 30
 COLOR_SQUARE_BORDER = 2
 COLOR_SQUARES_COLORS = [
-    # RGB
-    (255, 0,   0),
-    (0,   255, 0),
-    (0,   0,   255),
-    # CMY
-    (0,   255, 255),
-    (255, 0,   255),
-    (255, 255, 0),
-    # BW
-    (1,   1,   1), # In case alpha mask is black
-    (254, 254, 254), # In case alpha mask is white
+    (255, 0,   0), # Red
+    (0,   170, 50), # Green
+    (10,  10,  200), # Blue
+    (255, 255, 0), # Yellow
+    (255, 180, 180), # Pink
+    (255, 150, 0), # Orange
+    (130, 0, 200), # Purple
+    (1,   1,   1), # Black
+    (140, 70, 0), # Brown
 ]
+
+IMAGE_SHOW_PERIOD_SEC = 30
 
 FPS = 60
 
@@ -98,6 +103,11 @@ class ColorSquare():
         pygame.draw.rect(surf, self.color, pygame.Rect(tuple(self.pos), tuple(self.shape)))
 
 
+class ReferenceDrawing(NamedTuple):
+    surf: pygame.Surface
+    name: str
+
+
 def get_checkerboard(shape: Vec[int], rect_shape: Vec[float], color1 = (250, 250, 250), color2 = (230, 230, 230)) -> pygame.Surface:
     surf = pygame.Surface(tuple(shape))
     n_rects = (shape / rect_shape).ceil()
@@ -110,12 +120,26 @@ def get_checkerboard(shape: Vec[int], rect_shape: Vec[float], color1 = (250, 250
     return surf
 
 
+def load_drawings() -> list[ReferenceDrawing]:
+    """
+    Loads all images and scales to size of the drawing board
+    """
+    images = []
+    for file in Path("resources/drawings").iterdir():
+        image = pygame.image.load(file)
+        image = pygame.transform.scale(image, tuple(DRAWING_BOARD_SIZE))
+        images.append(ReferenceDrawing(image, file.stem))
+    return images
+
+
 def main():
     # Initialize pygame
     pygame.init()
     window = pygame.display.set_mode(tuple(WINDOW_SIZE))
     surf_checkerboard = get_checkerboard(DRAWING_BOARD_SIZE, DRAWING_BOARD_SIZE / 16)
     surf_canvas = pygame.Surface(tuple(DRAWING_BOARD_SIZE), flags=pygame.SRCALPHA)
+    surf_blacksquare = pygame.Surface(tuple(DRAWING_BOARD_SIZE))
+    surf_blacksquare.set_alpha(255)
     canvas_blank_color = (0, 0, 0, 0)
     surf_canvas.fill(canvas_blank_color)
     # TODO: Could do surf_canvas.set_colorkey((255,255,255)) to just make white transparent 
@@ -134,12 +158,27 @@ def main():
             shape = Vec(COLOR_SQUARE_SIZE, COLOR_SQUARE_SIZE)
         )
     selected_csq_index = 0
+    
+    # Drawings
+    reference_drawings = load_drawings()
+    reference_drawing_indices = list(range(len(reference_drawings)))
+    t_last_reference_drawing: float = time.time()
+    print(f"Loaded {len(reference_drawings)} reference drawings")
+    def select_next_drawing() -> tuple[ReferenceDrawing, float]:
+        t_last_reference_drawing = time.time()
+        idx = np.random.choice(reference_drawing_indices)
+        drawing = reference_drawings[idx]
+        reference_drawing_indices.remove(idx)
+        print(f"Selected new drawing '{drawing.name}'; {len(reference_drawing_indices)} left")
+        return drawing, t_last_reference_drawing
+    currently_selected_drawing, t_last_reference_drawing = select_next_drawing()
 
     # Main game loop
     should_run = True
     frame_timer = Timer(1 / FPS)
     while should_run:
         frame_timer.wait()
+        t_frame = time.time()
 
         # Get all new events
         events = pygame.event.get()
@@ -175,7 +214,11 @@ def main():
             cursor.stamp(surf_canvas, with_border=False)
         cursor.modify_pos(frame_cursor_delta)
         
-        # Draw!
+        ###############
+        ### Drawing ###
+        ###############
+
+        # Draw drawings
         window.fill((0, 0, 0)) # TODO: Maybe replace with blitting black rectangle? Unsure if faster
         window.blit(surf_checkerboard, tuple(DRAWING_BOARD_OFFSET)) # TODO: Maybe draw directly onto checkerboard?
         window.blit(surf_canvas, tuple(DRAWING_BOARD_OFFSET))
@@ -186,9 +229,16 @@ def main():
             csq: ColorSquare
             csq.stamp(window, i == selected_csq_index)
         
+        # Currently shown drawing logic
+        pos_shown_drawing = tuple(DRAWING_BOARD_OFFSET + Vec(DRAWING_BOARD_SIZE.X + DRAWING_BOARD_OFFSET.X, 0))
+        surf_blacksquare.set_alpha(255 * (t_frame - t_last_reference_drawing) / IMAGE_SHOW_PERIOD_SEC)
+        if t_frame - t_last_reference_drawing > IMAGE_SHOW_PERIOD_SEC:
+            currently_selected_drawing, t_last_reference_drawing = select_next_drawing()
+        window.blit(currently_selected_drawing.surf, pos_shown_drawing)
+        window.blit(surf_blacksquare, pos_shown_drawing)
+        
         # Update the display
         pygame.display.flip()
-        
 
 
 if __name__ == "__main__":
