@@ -16,7 +16,8 @@ class Vec(Generic[T]):
         return (self.X, self.Y)
 
     def __iter__(self):
-        return VecIterator(self)
+        yield self.X
+        yield self.Y
 
     def __repr__(self) -> str:
         return f"Vec({self.X}, {self.Y})"
@@ -103,6 +104,11 @@ class Vec(Generic[T]):
             return Vec(self.X // v.X, self.Y // v.Y)
         else:
             return Vec(self.X // v, self.Y // v)
+        
+    # Unary operators
+
+    def __neg__(self) -> Vec[T]:
+        return Vec(-self.X, -self.Y)
 
     # Other helpful functions
 
@@ -135,41 +141,29 @@ class Vec(Generic[T]):
             return Vec(min(self.X, max.X), min(self.Y, max.Y))
         else:
             return Vec(min(self.X, max), min(self.Y, max))
-
-    def min(self) -> T:
-        if self.X <= self.Y:
-            return self.X
-        else:
-            return self.Y
-    
-    def max(self) -> T:
-        if self.X < self.Y:
-            return self.Y
-        else:
-            return self.X
     
     def astype(self, t: type[T1]) -> Vec[T1]:
         return Vec(t(self.X), t(self.Y))
 
+    # Static Methods
+
+    def min(vec1: Vec[T], vec2: Vec[T]) -> Vec[T]:
+        return Vec(
+            min(vec1.X, vec2.X),
+            min(vec1.Y, vec2.Y),
+        )
+    
+
+    def max(vec1: Vec[T], vec2: Vec[T]) -> Vec[T]:
+        return Vec(
+            max(vec1.X, vec2.X),
+            max(vec1.Y, vec2.Y),
+        )
+
+
     def minmax(vec1: Vec[T], vec2: Vec[T]) -> tuple[Vec[T], Vec[T]]:
         return (Vec(min(vec1.X, vec2.X), min(vec1.Y, vec2.Y)),
                 Vec(max(vec1.X, vec2.X), max(vec1.Y, vec2.Y)))
-
-
-class VecIterator(Generic[T]):
-    def __init__(self, v: Vec[T]):
-        self.v = v
-        self.iter = -1
-    
-    def __next__(self) -> T:
-        self.iter += 1
-
-        if self.iter == 0:
-            return self.v.X
-        elif self.iter == 1:
-            return self.v.Y
-        else:
-            raise StopIteration
 
 
 class VecRange(Generic[T]):
