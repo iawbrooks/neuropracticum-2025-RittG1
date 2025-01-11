@@ -4,4 +4,4 @@ pandas
 Pillow
 scipy
 numpy
-gpiozero
+serial

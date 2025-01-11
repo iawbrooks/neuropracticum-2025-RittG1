@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import NamedTuple
-
+import threading
 import getpass
 import time
 import datetime
@@ -14,6 +14,8 @@ from utils import Vec, Timer
 IS_RPI = getpass.getuser() == "neuropracticum"
 if IS_RPI:
     print(f"Running on Raspberry Pi!")
+    from utils import serial_utils
+    serial_thread = threading.Thread(target=serial_utils.read_from_port)
 else:
     print(f"NOT running on Raspberry Pi! (I think)")
 PROJECT_DIR = Path(__file__).parent
@@ -297,6 +299,11 @@ def main():
         
         # Update the display
         pygame.display.flip()
+    
+    # Cleanup
+    if IS_RPI:
+        serial_utils.thread_should_run = False
+        time.sleep(0.5)
 
 
 if __name__ == "__main__":
