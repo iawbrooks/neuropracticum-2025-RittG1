@@ -9,12 +9,26 @@ WINDOW_SIZE = Vec(1280, 720)
 DRAWING_BOARD_SIZE = Vec(512, 512)
 DRAWING_BOARD_OFFSET = Vec(60, 60)
 COLOR_SQUARES_Y_OFFSET = 30
+COLOR_SQUARE_SIZE = 30
+COLOR_SQUARE_BORDER = 2
+COLOR_SQUARES_COLORS = [
+    # RGB
+    (255, 0,   0),
+    (0,   255, 0),
+    (0,   0,   255),
+    # CMY
+    (0,   255, 255),
+    (255, 0,   255),
+    (255, 255, 0),
+    # BW
+    (1,   1,   1), # In case alpha mask is black
+    (254, 254, 254), # In case alpha mask is white
+]
 
 FPS = 60
 
 CURSOR_VELOCITY = 150 / FPS # How many pixels per second should the cursor move?
 CURSOR_MAX_RADIUS = 64
-
 
 class Cursor():
     """
@@ -79,9 +93,9 @@ class ColorSquare():
 
 
     def stamp(self, surf: pygame.Surface, bordered: bool):
-        if bordered:
-            pygame.draw.rect(surf, (255, 255, 255), pygame.Rect(tuple(self.pos - 2), tuple(self.pos + self.shape + 2)))
-        pygame.draw.rect(surf, self.color, pygame.Rect(tuple(self.pos), tuple(self.pos + self.shape)))
+        border_color = (255, 255, 255) if bordered else (0, 0, 0) 
+        pygame.draw.rect(surf, border_color, pygame.Rect(tuple(self.pos - 2), tuple(self.shape + 4)))
+        pygame.draw.rect(surf, self.color, pygame.Rect(tuple(self.pos), tuple(self.shape)))
 
 
 def get_checkerboard(shape: Vec[int], rect_shape: Vec[float], color1 = (250, 250, 250), color2 = (230, 230, 230)) -> pygame.Surface:
@@ -94,21 +108,6 @@ def get_checkerboard(shape: Vec[int], rect_shape: Vec[float], color1 = (250, 250
             rect_color = color1 if (x_rect + y_rect) % 2 else color2
             pygame.draw.rect(surf, rect_color, pygame.Rect(tuple(rect_start), tuple(rect_stop - rect_start)))
     return surf
-
-
-def get_colorboard_colors(shape: Vec[int]):
-    colors = np.zeros((*shape, 3), dtype=int)
-    for x in range(shape.X):
-        for y in range(shape.Y):
-            x_norm = x / (shape.X - 1)
-            y_norm = 1 - y / (shape.Y - 1)
-
-            r = min(1.0, max(0, 1 - 3*np.abs(x_norm - 1/6))) * 255 * y_norm
-            g = min(1.0, max(0, 1 - 3*np.abs(x_norm - 3/6))) * 255 * y_norm
-            b = min(1.0, max(0, 1 - 3*np.abs(x_norm - 5/6))) * 255 * y_norm
-            colors[x, y] = [r, g, b]
-    
-    return colors
 
 
 def main():
@@ -124,19 +123,17 @@ def main():
     # Game objects
     cursor = Cursor(pos = DRAWING_BOARD_SIZE / 2)
     cursor_is_active = False
-    csqs_shape = Vec(13, 4)
-    colorboard_colors = get_colorboard_colors(csqs_shape)
-    color_squares = np.empty(tuple(csqs_shape), dtype=object)
+    n_color_squares = len(COLOR_SQUARES_COLORS)
+    color_squares = np.empty(n_color_squares, dtype=object)
     csq_xstart = DRAWING_BOARD_OFFSET.X
     csq_ystart = DRAWING_BOARD_OFFSET.Y + DRAWING_BOARD_SIZE.Y + COLOR_SQUARES_Y_OFFSET
-    for x in range(colorboard_colors.shape[0]):
-        for y in range(colorboard_colors.shape[1]):
-            color_squares[x, y] = ColorSquare(
-                colorboard_colors[x, y],
-                pos = Vec(csq_xstart + x*15, csq_ystart + y*15),
-                shape = Vec(10, 10)
-            )
-    csq_pos = Vec(0, 0)
+    for i in range(n_color_squares):
+        color_squares[i] = ColorSquare(
+            COLOR_SQUARES_COLORS[i],
+            pos = Vec(csq_xstart + i*(COLOR_SQUARE_SIZE + COLOR_SQUARE_BORDER * 2), csq_ystart),
+            shape = Vec(COLOR_SQUARE_SIZE, COLOR_SQUARE_SIZE)
+        )
+    selected_csq_index = 0
 
     # Main game loop
     should_run = True
@@ -157,6 +154,8 @@ def main():
                         surf_canvas.fill(canvas_blank_color)
                     case pygame.K_t: # Toggle cursor down
                         cursor_is_active = not cursor_is_active
+                    case pygame.K_w: # Next color
+                        selected_csq_index = (selected_csq_index + 1) % n_color_squares
         
         # Process continuous keyboard inputs
         keys = pygame.key.get_pressed()
@@ -169,17 +168,9 @@ def main():
             frame_cursor_delta.X -= CURSOR_VELOCITY
         if keys[pygame.K_RIGHT]:
             frame_cursor_delta.X += CURSOR_VELOCITY
-        if keys[pygame.K_w]:
-            csq_pos.Y = (csq_pos.Y - 1) % csqs_shape.Y
-        if keys[pygame.K_w]:
-            csq_pos.Y = (csq_pos.Y + 1) % csqs_shape.Y
-        if keys[pygame.K_a]:
-            csq_pos.X = (csq_pos.X - 1) % csqs_shape.X
-        if keys[pygame.K_d]:
-            csq_pos.X = (csq_pos.X + 1) % csqs_shape.X
 
         # Account for cursor drawing
-        cursor.color = color_squares[csq_pos.X, csq_pos.Y].color
+        cursor.color = color_squares[selected_csq_index].color
         if cursor_is_active:
             cursor.stamp(surf_canvas, with_border=False)
         cursor.modify_pos(frame_cursor_delta)
@@ -191,9 +182,9 @@ def main():
         cursor.stamp(window, DRAWING_BOARD_OFFSET, with_border=True)
 
         # Draw color squares
-        for csq in color_squares.flat:
+        for i, csq in enumerate(color_squares):
             csq: ColorSquare
-            csq.stamp(window, False)
+            csq.stamp(window, i == selected_csq_index)
         
         # Update the display
         pygame.display.flip()
