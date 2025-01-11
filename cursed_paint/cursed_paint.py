@@ -15,7 +15,8 @@ IS_RPI = getpass.getuser() == "neuropracticum"
 if IS_RPI:
     print(f"Running on Raspberry Pi!")
     from utils import serial_utils
-    serial_thread = threading.Thread(target=serial_utils.read_from_port)
+    serial_thread = threading.Thread(target=serial_utils.read_from_port, args=(serial_utils.serial_port, ))
+    serial_thread.start()
 else:
     print(f"NOT running on Raspberry Pi! (I think)")
 PROJECT_DIR = Path(__file__).parent
@@ -247,7 +248,9 @@ def main():
         # Get all new events
         events = pygame.event.get()
         
-        # Process events
+        ######################
+        ### Process events ###
+        ######################
         for event in events:
             if event.type == pygame.QUIT:
                 should_run = False
@@ -271,10 +274,16 @@ def main():
             frame_cursor_delta.X -= CURSOR_VELOCITY
         if keys[pygame.K_RIGHT]:
             frame_cursor_delta.X += CURSOR_VELOCITY
-
-        # Account for cursor drawing
         game.cursor.modify_pos(frame_cursor_delta)
         
+        #########################
+        ### Raspberry Pi Shit ###
+        #########################
+
+        if IS_RPI:
+            emg = serial_utils.get_emg_activation()
+            print(emg)
+
         ###############
         ### Drawing ###
         ###############
@@ -283,6 +292,8 @@ def main():
         window.fill((0, 0, 0)) # TODO: Maybe replace with blitting black rectangle? Unsure if faster
         window.blit(surf_checkerboard, tuple(DRAWING_BOARD_OFFSET)) # TODO: Maybe draw directly onto checkerboard?
         window.blit(surf_canvas, tuple(DRAWING_BOARD_OFFSET))
+
+        # Draw cursor & color squares
         game.cursor.stamp(window, DRAWING_BOARD_OFFSET, with_border=True)
         game.draw_cursor(surf_canvas)
         game.draw_squares(window)

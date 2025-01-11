@@ -1,6 +1,7 @@
 import serial
 import numpy as np
 import time
+from scipy.signal import butter, lfilter
 
 #%% main code
 global connected
@@ -147,3 +148,37 @@ def read_from_port(ser):
            time.sleep(0.001)
     print("USB thread quitting")
     
+
+# ---------------------------------------------------------------------------------------------------
+# User code
+
+
+#this is the alleged high-pass filter... we tried our best :)
+def high_pass_filter (emg, cutoff, fs, order=4):
+    nyquist= 0.5 * fs
+    normalCutoff = cutoff / nyquist 
+    b,a = butter(order, normalCutoff, btype= 'high', analog= False)
+    filtered_emg = lfilter (b,a, emg) 
+    return filtered_emg
+    
+
+def get_emg_activation():
+    global sample_buffer
+    emg = sample_buffer.copy()
+    print(sample_buffer.shape)
+    
+    # Don't change
+    emg = emg[-display_size:]
+    sample_buffer = sample_buffer[-display_size:]
+
+
+    # Can change
+    fs= 10000
+    cutoff= 20
+    filtered_emg= high_pass_filter( emg, cutoff, fs, order=4)
+
+    #   absolute value
+    filtered_emg = np.abs(filtered_emg) 
+    #   mean
+    mean_emg = np.mean(filtered_emg[-200:])
+    return mean_emg
